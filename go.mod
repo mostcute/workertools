@@ -1,4 +1,4 @@
-module github.com/filecoin-project/yz-watch-manager/workertools
+module github.com/mostcute/workertools
 
 go 1.14
 require (
