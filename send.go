@@ -2,30 +2,59 @@ package workertools
 
 import (
 	"encoding/json"
-	"github.com/filecoin-project/yz-watch-manager/msg"
-	"github.com/filecoin-project/yz-watch-manager/tools"
-	"strconv"
-	"time"
 	"github.com/gorilla/websocket"
 	"os"
+	"strconv"
+	"time"
 )
 
-var Ch chan msg.ReportWork
+var Ch chan ReportWork
 var Host string
 var Ip string
 var dia websocket.Dialer
 var Con *websocket.Conn
 var Server string
 var Isinit bool
+
+
+var Workerlist map[string] Worker
+type WorkerMsg struct {
+	Msgtype string
+	Data []byte
+}
+
+type ReportWork struct {
+	Ip string
+	Time int64
+	Data WorkInfo
+}
+type WorkInfo struct {
+	Status string
+	Type string
+	Sectors map[string]string
+}
+type Worker struct{
+	Ip string
+	Hostname string
+	Time int64
+	//tasks []uint64   //0:Addpiece 1:precommit1 2: precommit2 3:commit1 4:commit2
+	Workerstatus  WorkerStatus
+}
+type WorkerStatus struct {
+	Status string `json:"status"`
+	Type string `json:"type"`
+	Phrase map[string][]string `json:"phrase"`
+
+}
 func Workinit(){
-	Ch = make(chan msg.ReportWork,10000)
+	Ch = make(chan ReportWork,10000)
 	var err error
 	Host,err =os.Hostname()
 	if err != nil{
-		tools.Plog.Println("Hostname:", err)
+		Pfloger.Println("Hostname:", err)
 	}
-	Ip = tools.Get_hostip()
-	tools.Print_hostipall()
+	Ip = Get_hostip()
+	Print_hostipall()
 	if Isinit{
 		return
 	}
@@ -33,8 +62,8 @@ func Workinit(){
 
 	//Con, _, err = dia.Dial("ws://192.168.66.105:5678/worker", nil)
 	//if err != nil {
-	//	tools.Flog.Println("dial:", err)
-	//	tools.Plog.Println("dial:", err)
+	//	Flog.Println("dial:", err)
+	//	Pfloger.Println("dial:", err)
 	//}
 }
 func Reconnect(){
@@ -52,21 +81,18 @@ func Connect() error{
 	var err error
 	Con, _, err = dia.Dial("ws://"+Server+"/worker", nil)
 	if err != nil {
-		tools.Flog.Println("dial:", err)
-		tools.Plog.Println("dial:", err)
+		Pfloger.Println("dial:", err)
 		return err
 	}else{
-		tools.Flog.Println("reconnect success")
-		tools.Plog.Println("reconnect success")
+		Pfloger.Println("reconnect success")
 	}
 	return nil
 }
 func CheckCh(){
 	for{
 		if len(Ch)>6000{
-			tools.Flog.Println("worker report Ch panic wraning")
-			tools.Plog.Println("worker report Ch panic wraning")
-			//TODO:ȫ����������ػ���
+			Pfloger.Println("worker report Ch panic wraning")
+			//TODO:save the ch in the location
 
 		}
 
@@ -75,12 +101,13 @@ func CheckCh(){
 func Processoutcoming(){
 
 	//tickTimer := time.NewTicker(7 * time.Second)
-	go func() {
+	go CheckCh()
+	go func() {//目前不读取信息单纯维持心跳在线
 		for{
-			var Msg msg.WorkerMsg
+			var Msg WorkerMsg
 			err := Con.ReadJSON(Msg)
 			if err != nil {
-				tools.Plog.Println("processIncomingMessage:", err)
+				Pfloger.Println("processIncomingMessage:", err)
 				Reconnect()
 			}
 		}
@@ -91,31 +118,31 @@ func Processoutcoming(){
 		case  Msg :=<-Ch:
 			js,err := json.Marshal(Msg)
 			if err != nil {
-				tools.Plog.Println("processOutcomingMessage:", err)
+				Pfloger.Println("processOutcomingMessage:", err)
 			}
-			var mmsg msg.WorkerMsg
+			var mmsg WorkerMsg
 			mmsg.Msgtype = "Reportwork"
 			mmsg.Data = js
 
 			err = Con.WriteJSON(mmsg)
 			if err != nil {
-				tools.Plog.Println("processOutcomingMessage:", err)
+				Pfloger.Println("processOutcomingMessage:", err)
 				Reconnect()
 			}
 		//case <- tickTimer.C://可重连
 		//	var Msg msg.WorkerMsg
 		//	err := Con.WriteJSON(Msg)
 		//	if err != nil {
-		//		tools.Plog.Println("write:", err)
+		//		Pfloger.Println("write:", err)
 		//		Reconnect()
 		//	}
 		}
 	}
 }
-var ReportInfo msg.WorkInfo
+var ReportInfo WorkInfo
 
 func Roport(phrase string, sid int64){
-	var Msg msg.ReportWork
+	var Msg ReportWork
 	Msg.Ip = Ip
 	Msg.Time = time.Now().Unix()
 	//ReportInfo.Type = "all"
@@ -132,7 +159,3 @@ func Roport(phrase string, sid int64){
 }
 
 
-
-func SendMsg(){
-
-}
