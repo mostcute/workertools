@@ -15,6 +15,7 @@ var dia websocket.Dialer
 var Con *websocket.Conn
 var Server string
 var Isinit bool
+var IsManagerSet bool = false
 
 
 var Workerlist map[string] Worker
@@ -47,24 +48,27 @@ type WorkerStatus struct {
 
 }
 func Workinit(){
-	Ch = make(chan ReportWork,10000)
-	var err error
-	Host,err =os.Hostname()
-	if err != nil{
-		Pfloger.Println("Hostname:", err)
-	}
-	Ip = Get_hostip()
-	Print_hostipall()
-	if Isinit{
-		return
-	}
-	Reconnect()
+	
 
-	//Con, _, err = dia.Dial("ws://192.168.66.105:5678/worker", nil)
-	//if err != nil {
-	//	Flog.Println("dial:", err)
-	//	Pfloger.Println("dial:", err)
-	//}
+	if IsManagerSet == false{//假设命令绝对正确，只存在无和绝对正确（无限重连）两种情况
+
+		Pfloger.Println("don't receive manager address")
+
+	}else {
+
+		Ch = make(chan ReportWork,10000)
+		var err error
+		Host,err =os.Hostname()
+		if err != nil{
+			Pfloger.Println("Hostname:", err)
+		}
+		Ip = Get_hostip()
+		Print_hostipall()
+		if Isinit{
+			return
+		}
+		Reconnect()
+	}
 }
 func Reconnect(){
 	var err error
@@ -99,60 +103,67 @@ func CheckCh(){
 	}
 }
 func Processoutcoming(){
+	if 	IsManagerSet == true{
 
-	//tickTimer := time.NewTicker(7 * time.Second)
-	go CheckCh()
-	go func() {//目前不读取信息单纯维持心跳在线
-		for{
-			var Msg WorkerMsg
-			err := Con.ReadJSON(Msg)
-			if err != nil {
-				Pfloger.Println("processIncomingMessage:", err)
-				Reconnect()
-			}
-		}
 
-	}()
-	for {
-		select {
-		case  Msg :=<-Ch:
-			js,err := json.Marshal(Msg)
-			if err != nil {
-				Pfloger.Println("processOutcomingMessage:", err)
+		//tickTimer := time.NewTicker(7 * time.Second)
+		go CheckCh()
+		go func() {//目前不读取信息单纯维持心跳在线
+			for{
+				var Msg WorkerMsg
+				err := Con.ReadJSON(Msg)
+				if err != nil {
+					Pfloger.Println("processIncomingMessage:", err)
+					Reconnect()
+				}
 			}
-			var mmsg WorkerMsg
-			mmsg.Msgtype = "Reportwork"
-			mmsg.Data = js
 
-			err = Con.WriteJSON(mmsg)
-			if err != nil {
-				Pfloger.Println("processOutcomingMessage:", err)
-				Reconnect()
+		}()
+		for {
+			select {
+			case  Msg :=<-Ch:
+				js,err := json.Marshal(Msg)
+				if err != nil {
+					Pfloger.Println("processOutcomingMessage:", err)
+				}
+				var mmsg WorkerMsg
+				mmsg.Msgtype = "Reportwork"
+				mmsg.Data = js
+
+				err = Con.WriteJSON(mmsg)
+				if err != nil {
+					Pfloger.Println("processOutcomingMessage:", err)
+					Reconnect()
+				}
+				//case <- tickTimer.C://可重连
+				//	var Msg msg.WorkerMsg
+				//	err := Con.WriteJSON(Msg)
+				//	if err != nil {
+				//		Pfloger.Println("write:", err)
+				//		Reconnect()
+				//	}
 			}
-		//case <- tickTimer.C://可重连
-		//	var Msg msg.WorkerMsg
-		//	err := Con.WriteJSON(Msg)
-		//	if err != nil {
-		//		Pfloger.Println("write:", err)
-		//		Reconnect()
-		//	}
 		}
 	}
+
+
 }
 var ReportInfo WorkInfo
 
 func Roport(phrase string, sid int64){
-	var Msg ReportWork
-	Msg.Ip = Ip
-	Msg.Time = time.Now().Unix()
-	//ReportInfo.Type = "all"
-	var sectorInfo = make(map[string]string)
+	if 	IsManagerSet == true {
 
-	sectorInfo[phrase]=strconv.FormatInt(sid,10)
-	
-	ReportInfo.Sectors = sectorInfo
-	Msg.Data = ReportInfo
-	Ch <- Msg
+		var Msg ReportWork
+		Msg.Ip = Ip
+		Msg.Time = time.Now().Unix()
+		//ReportInfo.Type = "all"
+		var sectorInfo = make(map[string]string)
+		sectorInfo[phrase]=strconv.FormatInt(sid,10)
+		ReportInfo.Sectors = sectorInfo
+		Msg.Data = ReportInfo
+		Ch <- Msg
+	}
+
 	//ret,_:= json.Marshal(Msg)
 	//
 	//fmt.Println(string(ret))
